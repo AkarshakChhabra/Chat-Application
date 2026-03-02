@@ -106,3 +106,52 @@ body {
 #send-btn:hover {
     background: #0073e6;
 }
+
+.login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8); /* Dark semi-transparent background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100; /* Puts it on top of the chat */
+}
+
+.login-box {
+    background: var(--white);
+    padding: 30px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.login-box h2 {
+    margin-top: 0;
+    color: var(--text-dark);
+}
+
+.login-box input {
+    padding: 10px;
+    margin: 10px 0;
+    width: 80%;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    outline: none;
+}
+
+.login-box button {
+    padding: 10px 20px;
+    background: var(--primary-blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.hidden {
+    display: none !important;
+}
