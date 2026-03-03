@@ -20,6 +20,16 @@ io.on('connection', (socket) => {
         io.emit('chat-message', msg);
     });
 
+    // Listen for someone typing
+    socket.on('typing', (username) => {
+        socket.broadcast.emit('typing', username);
+    });
+
+    // Listen for someone stopping
+    socket.on('stop-typing', () => {
+        socket.broadcast.emit('stop-typing');
+    });
+    
     socket.on('disconnect', () => {
         console.log('User disconnected');
     });
