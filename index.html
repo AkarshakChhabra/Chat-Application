@@ -3,34 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Simple Chat App</title>
+    <title>Secure Chat App</title>
     <link rel="stylesheet" href="style.css">
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-    <div id="login-screen" class="login-overlay">
-        <div class="login-box">
-            <h2>Enter your name</h2>
-            <input type="text" id="username-input" placeholder="e.g. Alex" autocomplete="off">
-            <button id="join-btn">Join Chat</button>
-        </div>
-    </div>
-
     <div class="chat-wrapper">
         <header class="app-header">
-            <h1>Group Chat</h1>
-            <span id="status-dot"></span> Online
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <h1>Group Chat</h1>
+                <span id="status-dot"></span> Online
+            </div>
+            
+            <button id="logout-btn" style="margin-left: auto; background: transparent; border: 1px solid white; color: white; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                Log Out
+            </button>
         </header>
 
         <div id="chat-window" class="chat-window">
             <div class="message received">
-                <strong>Bot:</strong> Welcome! This is a simple chat layout.
+                <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px; font-weight: bold;">System</div>
+                Welcome to the secure chat! Messages are live.
             </div>
         </div>
 
         <div id="typing-indicator" class="typing-indicator-hidden"></div>
+        
         <form id="message-form" class="input-area">
-            <input type="text" id="user-msg" placeholder="Write a message..." autocomplete="off">
+            <input type="text" id="user-msg" placeholder="Write a message..." autocomplete="off" required>
             <button type="submit" id="send-btn">Send</button>
         </form>
     </div>

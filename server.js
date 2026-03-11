@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const path = require('path');
+const User = require('./models/User');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,6 +12,8 @@ const io = new Server(server);
 
 // Serve static assets from the current directory
 app.use(express.static(__dirname));
+// This lets Express read the JSON data sent from our signup form
+app.use(express.json());
 
 // Initialize MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
@@ -26,6 +29,56 @@ const messageSchema = new mongoose.Schema({
 });
 
 const Message = mongoose.model('Message', messageSchema);
+
+// --- USER AUTHENTICATION ROUTES ---
+
+app.post('/signup', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        // 1. Check if the user already exists
+        const existingUser = await User.findOne({ username });
+        if (existingUser) {
+            return res.status(400).json({ error: 'Username is already taken.' });
+        }
+
+        // 2. Create the new user (bcrypt will automatically hash the password here!)
+        const newUser = new User({ username, password });
+        await newUser.save();
+
+        // 3. Send a success message back to the frontend
+        res.status(201).json({ message: 'Account created successfully!' });
+
+    } catch (error) {
+        console.error("Signup error:", error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+app.post('/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        // 1. Check if the user actually exists in the database
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid username or password.' });
+        }
+
+        // 2. Use the helper function we wrote in User.js to check the password
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Invalid username or password.' });
+        }
+
+        // 3. If everything matches, send a success message!
+        res.status(200).json({ message: 'Login successful!', username: user.username });
+
+    } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
 
 io.on('connection', async (socket) => {
     console.log(`Client connected: ${socket.id}`);

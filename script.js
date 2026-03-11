@@ -1,30 +1,26 @@
 const socket = io(); 
 
-// Element Selectors
+// --- ELEMENT SELECTORS ---
 const chatForm = document.getElementById('message-form');
 const chatInput = document.getElementById('user-msg');
 const chatWindow = document.getElementById('chat-window');
-
-// Login Elements
-const loginScreen = document.getElementById('login-screen');
-const usernameInput = document.getElementById('username-input');
-const joinBtn = document.getElementById('join-btn');
-
 const typingIndicator = document.getElementById('typing-indicator');
+
 let typingTimer; 
+let currentUsername = ""; 
 
-let currentUsername = ""; // Variable to store the username
+// --- REAL AUTHENTICATION CHECK ---
+const savedUsername = localStorage.getItem('chatUsername');
 
-// 1. Handle Login
-joinBtn.addEventListener('click', () => {
-    const name = usernameInput.value.trim();
-    if (name !== "") {
-        currentUsername = name;
-        loginScreen.classList.add('hidden'); // Hide the login screen
-    }
-});
+if (!savedUsername) {
+    // If they aren't logged in, immediately kick them to the login page
+    window.location.href = '/login.html';
+} else {
+    // If they are logged in, set their name!
+    currentUsername = savedUsername;
+}
 
-// 2. Listen for incoming messages
+// --- SOCKET EVENT LISTENERS ---
 socket.on('chat-message', function(msgData) {
     const isMe = msgData.id === socket.id;
     const type = isMe ? 'sent' : 'received';
@@ -38,18 +34,16 @@ socket.on('typing', (username) => {
     typingIndicator.classList.remove('hidden');
 });
 
-// Listen for other people stopping
 socket.on('stop-typing', () => {
     typingIndicator.textContent = "";
     typingIndicator.classList.add('hidden');
 });
 
-// 3. Append messages to the DOM
+// --- HELPER FUNCTIONS ---
 function appendMessage(text, type, senderName) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message', type);
     
-    // Add a tiny span for the username above the message text
     msgDiv.innerHTML = `
         <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px; font-weight: bold;">
             ${senderName}
@@ -61,36 +55,36 @@ function appendMessage(text, type, senderName) {
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
+// --- USER INPUT EVENT LISTENERS ---
 chatInput.addEventListener('input', () => {
     if (currentUsername !== "") {
-        // Tell the server we are typing
         socket.emit('typing', currentUsername);
-        
-        // Clear the countdown timer if they hit another key
         clearTimeout(typingTimer);
-        
-        // Start a new 1-second countdown. If it finishes, tell the server we stopped.
         typingTimer = setTimeout(() => {
             socket.emit('stop-typing');
         }, 1000);
     }
 });
 
-// 4. Send message to the server
 chatForm.addEventListener('submit', function(event) {
-    event.preventDefault();
+    event.preventDefault(); 
     const text = chatInput.value.trim();
     
     if (text !== "" && currentUsername !== "") {
-        // Now we send the username along with the text
         socket.emit('chat-message', { 
             text: text, 
             id: socket.id, 
             username: currentUsername 
         });
-        chatInput.value = "";
         
+        chatInput.value = "";
         socket.emit('stop-typing');
         clearTimeout(typingTimer);
     }
+});
+
+// --- LOGOUT FUNCTIONALITY ---
+document.getElementById('logout-btn').addEventListener('click', () => {
+    localStorage.removeItem('chatUsername');
+    window.location.href = '/login.html';
 });

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In - Chat App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="login-box">
+        <h2>Welcome Back</h2>
+        
+        <form id="login-form">
+            <input type="text" id="username" placeholder="Username" required autocomplete="off">
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Log In</button>
+        </form>
+
+        <p style="margin-top: 15px; font-size: 14px; color: #555;">
+            Don't have an account? <a href="/signup.html" style="color: var(--primary-blue); text-decoration: none;">Sign up</a>
+        </p>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                // Save the verified username into the browser's memory!
+                localStorage.setItem('chatUsername', result.username);
+                window.location.href = '/'; 
+            } else {
+                alert('Error: ' + result.error);
+            }
+            
+        });
+    </script>
+</body>
+</html>
