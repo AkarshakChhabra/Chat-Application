@@ -3,54 +3,33 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-const path = require('path');
-const User = require('./models/User');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Serve static assets from the current directory
 app.use(express.static(__dirname));
-// This lets Express read the JSON data sent from our signup form
-app.use(express.json());
+app.use(express.json()); 
 
-// Initialize MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Connected to MongoDB Atlas'))
     .catch(err => console.error('Database connection error:', err));
 
-// Define message schema and model
-const messageSchema = new mongoose.Schema({
-    id: String,
-    username: String,
-    text: String,
-    timestamp: { type: Date, default: Date.now } 
-});
+const User = require('./models/User'); 
+const Conversation = require('./models/Conversation');
+const Message = require('./models/Message');
 
-const Message = mongoose.model('Message', messageSchema);
-
-// --- USER AUTHENTICATION ROUTES ---
-
+// --- 1. USER AUTHENTICATION ---
 app.post('/signup', async (req, res) => {
     try {
         const { username, password } = req.body;
-
-        // 1. Check if the user already exists
         const existingUser = await User.findOne({ username });
-        if (existingUser) {
-            return res.status(400).json({ error: 'Username is already taken.' });
-        }
+        if (existingUser) return res.status(400).json({ error: 'Username is already taken.' });
 
-        // 2. Create the new user (bcrypt will automatically hash the password here!)
         const newUser = new User({ username, password });
         await newUser.save();
-
-        // 3. Send a success message back to the frontend
         res.status(201).json({ message: 'Account created successfully!' });
-
     } catch (error) {
-        console.error("Signup error:", error);
         res.status(500).json({ error: 'Internal server error.' });
     }
 });
@@ -58,76 +37,99 @@ app.post('/signup', async (req, res) => {
 app.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-
-        // 1. Check if the user actually exists in the database
         const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(400).json({ error: 'Invalid username or password.' });
-        }
+        if (!user) return res.status(400).json({ error: 'Invalid username or password.' });
 
-        // 2. Use the helper function we wrote in User.js to check the password
         const isMatch = await user.comparePassword(password);
-        if (!isMatch) {
-            return res.status(400).json({ error: 'Invalid username or password.' });
-        }
+        if (!isMatch) return res.status(400).json({ error: 'Invalid username or password.' });
 
-        // 3. If everything matches, send a success message!
         res.status(200).json({ message: 'Login successful!', username: user.username });
-
     } catch (error) {
-        console.error("Login error:", error);
         res.status(500).json({ error: 'Internal server error.' });
     }
 });
 
-io.on('connection', async (socket) => {
-    console.log(`Client connected: ${socket.id}`);
-
-    // Fetch and emit recent message history to the newly connected client
+// --- 2. CONVERSATIONS & MESSAGES ---
+app.get('/conversations/:username', async (req, res) => {
     try {
-        const pastMessages = await Message.find().sort({ timestamp: 1 }).limit(50);
-        
-        pastMessages.forEach((msg) => {
-            socket.emit('chat-message', {
-                id: msg.id,
-                username: msg.username,
-                text: msg.text
-            });
-        });
-    } catch (err) {
-        console.error("Failed to fetch message history:", err);
+        const convos = await Conversation.find({ participants: req.params.username })
+                                         .sort({ updatedAt: -1 }); 
+        res.status(200).json(convos);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch conversations.' });
     }
+});
 
-    // Handle incoming chat messages
-    socket.on('chat-message', async (msg) => {
-        // Persist message to database
+app.post('/conversations', async (req, res) => {
+    try {
+        const { sender, receiver } = req.body;
+        
+        // Security check: Does the receiver exist?
+        const receiverExists = await User.findOne({ username: receiver });
+        if (!receiverExists) return res.status(404).json({ error: 'User does not exist.' });
+
+        let convo = await Conversation.findOne({
+            isGroupChat: false,
+            participants: { $all: [sender, receiver] }
+        });
+
+        if (!convo) {
+            convo = new Conversation({
+                participants: [sender, receiver],
+                isGroupChat: false
+            });
+            await convo.save();
+        }
+        res.status(200).json(convo);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create conversation.' });
+    }
+});
+
+app.get('/messages/:conversationId', async (req, res) => {
+    try {
+        const messages = await Message.find({ conversationId: req.params.conversationId })
+                                      .sort({ createdAt: 1 }); 
+        res.status(200).json(messages);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch messages.' });
+    }
+});
+
+// --- 3. REAL-TIME SOCKET HANDLING ---
+io.on('connection', (socket) => {
+    socket.on('join-room', (conversationId) => {
+        Array.from(socket.rooms).forEach(room => {
+            if (room !== socket.id) socket.leave(room);
+        });
+        socket.join(conversationId);
+    });
+
+    socket.on('chat-message', async (msgData) => {
         try {
             const newMessage = new Message({
-                id: msg.id,
-                username: msg.username,
-                text: msg.text
+                conversationId: msgData.conversationId,
+                sender: msgData.username,
+                text: msgData.text
             });
             await newMessage.save();
+
+            io.to(msgData.conversationId).emit('chat-message', {
+                _id: newMessage._id,
+                conversationId: msgData.conversationId,
+                username: msgData.username, 
+                text: msgData.text,
+                createdAt: newMessage.createdAt
+            });
+            
+            await Conversation.findByIdAndUpdate(msgData.conversationId, { updatedAt: Date.now() });
         } catch (err) {
-            console.error("Failed to persist message:", err);
+            console.error("Failed to process message:", err);
         }
-
-        // Broadcast to all connected clients
-        io.emit('chat-message', msg);
     });
 
-    // Handle typing indicators (broadcast to all except sender)
-    socket.on('typing', (username) => {
-        socket.broadcast.emit('typing', username);
-    });
-
-    socket.on('stop-typing', () => {
-        socket.broadcast.emit('stop-typing');
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`Client disconnected: ${socket.id}`);
-    });
+    socket.on('typing', (data) => socket.to(data.conversationId).emit('typing', data.username));
+    socket.on('stop-typing', (conversationId) => socket.to(conversationId).emit('stop-typing'));
 });
 
 const PORT = process.env.PORT || 3000;

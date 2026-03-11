@@ -1,32 +1,121 @@
-const socket = io(); 
+const socket = io();
 
-// --- ELEMENT SELECTORS ---
+const savedUsername = localStorage.getItem('chatUsername');
+if (!savedUsername) window.location.href = '/login.html';
+const currentUsername = savedUsername;
+let currentConversationId = null; 
+let typingTimer;
+
 const chatForm = document.getElementById('message-form');
 const chatInput = document.getElementById('user-msg');
+const sendBtn = document.getElementById('send-btn');
 const chatWindow = document.getElementById('chat-window');
+const chatTitle = document.getElementById('chat-title');
+const statusDot = document.getElementById('status-dot');
+const conversationList = document.getElementById('conversation-list');
 const typingIndicator = document.getElementById('typing-indicator');
 
-let typingTimer; 
-let currentUsername = ""; 
+const newChatBtn = document.getElementById('new-chat-btn');
+const newChatModal = document.getElementById('new-chat-modal');
+const cancelChatBtn = document.getElementById('cancel-chat-btn');
+const startChatBtn = document.getElementById('start-chat-btn');
+const newChatUsernameInput = document.getElementById('new-chat-username');
 
-// --- REAL AUTHENTICATION CHECK ---
-const savedUsername = localStorage.getItem('chatUsername');
+loadConversations();
 
-if (!savedUsername) {
-    // If they aren't logged in, immediately kick them to the login page
-    window.location.href = '/login.html';
-} else {
-    // If they are logged in, set their name!
-    currentUsername = savedUsername;
+async function loadConversations() {
+    try {
+        const res = await fetch(`/conversations/${currentUsername}`);
+        const convos = await res.json();
+        
+        conversationList.innerHTML = ''; 
+        
+        convos.forEach(convo => {
+            const otherUser = convo.participants.find(p => p !== currentUsername);
+            const displayName = convo.isGroupChat ? convo.chatName : otherUser;
+
+            const div = document.createElement('div');
+            div.classList.add('convo-item');
+            if (convo._id === currentConversationId) div.classList.add('active'); 
+            
+            div.innerHTML = `<div class="convo-name">${displayName}</div>`;
+            div.addEventListener('click', () => selectConversation(convo._id, displayName));
+            conversationList.appendChild(div);
+        });
+    } catch (err) {
+        console.error("Error loading conversations", err);
+    }
 }
 
-// --- SOCKET EVENT LISTENERS ---
-socket.on('chat-message', function(msgData) {
-    const isMe = msgData.id === socket.id;
-    const type = isMe ? 'sent' : 'received';
-    const displayName = isMe ? 'You' : msgData.username;
+async function selectConversation(convoId, displayName) {
+    currentConversationId = convoId;
+    chatTitle.textContent = displayName;
+    statusDot.classList.remove('hidden');
     
-    appendMessage(msgData.text, type, displayName);
+    chatInput.disabled = false;
+    sendBtn.disabled = false;
+    chatInput.focus();
+    
+    loadConversations(); 
+    socket.emit('join-room', convoId);
+    
+    try {
+        const res = await fetch(`/messages/${convoId}`);
+        const messages = await res.json();
+        
+        chatWindow.innerHTML = ''; 
+        messages.forEach(msg => {
+            const type = msg.sender === currentUsername ? 'sent' : 'received';
+            const senderName = msg.sender === currentUsername ? 'You' : msg.sender;
+            appendMessage(msg.text, type, senderName);
+        });
+    } catch (err) {
+        console.error("Error loading messages", err);
+    }
+}
+
+newChatBtn.addEventListener('click', () => newChatModal.classList.remove('hidden'));
+
+cancelChatBtn.addEventListener('click', () => {
+    newChatModal.classList.add('hidden');
+    newChatUsernameInput.value = '';
+});
+
+startChatBtn.addEventListener('click', async () => {
+    const receiver = newChatUsernameInput.value.trim();
+    if (!receiver || receiver === currentUsername) return alert("Please enter a valid username.");
+
+    try {
+        const res = await fetch('/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sender: currentUsername, receiver })
+        });
+        
+        // Alert if the server rejects the username
+        if (!res.ok) {
+            const errorData = await res.json();
+            return alert(errorData.error); 
+        }
+
+        const newConvo = await res.json();
+        newChatModal.classList.add('hidden');
+        newChatUsernameInput.value = '';
+        
+        await loadConversations();
+        selectConversation(newConvo._id, receiver);
+    } catch (err) {
+        console.error("Error creating chat", err);
+    }
+});
+
+socket.on('chat-message', (msg) => {
+    if (msg.conversationId === currentConversationId) {
+        const type = msg.username === currentUsername ? 'sent' : 'received';
+        const senderName = msg.username === currentUsername ? 'You' : msg.username;
+        appendMessage(msg.text, type, senderName);
+    }
+    loadConversations();
 });
 
 socket.on('typing', (username) => {
@@ -39,51 +128,43 @@ socket.on('stop-typing', () => {
     typingIndicator.classList.add('hidden');
 });
 
-// --- HELPER FUNCTIONS ---
+chatInput.addEventListener('input', () => {
+    if (currentConversationId) {
+        socket.emit('typing', { conversationId: currentConversationId, username: currentUsername });
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => socket.emit('stop-typing', currentConversationId), 1000);
+    }
+});
+
+chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    
+    if (text && currentConversationId) {
+        socket.emit('chat-message', {
+            conversationId: currentConversationId,
+            username: currentUsername,
+            text: text
+        });
+        chatInput.value = '';
+        socket.emit('stop-typing', currentConversationId);
+        clearTimeout(typingTimer);
+    }
+});
+
 function appendMessage(text, type, senderName) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message', type);
-    
     msgDiv.innerHTML = `
         <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px; font-weight: bold;">
             ${senderName}
         </div>
         ${text}
     `;
-    
     chatWindow.appendChild(msgDiv);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
+    chatWindow.scrollTop = chatWindow.scrollHeight; 
 }
 
-// --- USER INPUT EVENT LISTENERS ---
-chatInput.addEventListener('input', () => {
-    if (currentUsername !== "") {
-        socket.emit('typing', currentUsername);
-        clearTimeout(typingTimer);
-        typingTimer = setTimeout(() => {
-            socket.emit('stop-typing');
-        }, 1000);
-    }
-});
-
-chatForm.addEventListener('submit', function(event) {
-    event.preventDefault(); 
-    const text = chatInput.value.trim();
-    
-    if (text !== "" && currentUsername !== "") {
-        socket.emit('chat-message', { 
-            text: text, 
-            id: socket.id, 
-            username: currentUsername 
-        });
-        
-        chatInput.value = "";
-        socket.emit('stop-typing');
-        clearTimeout(typingTimer);
-    }
-});
-
-// --- LOGOUT FUNCTIONALITY ---
 document.getElementById('logout-btn').addEventListener('click', () => {
     localStorage.removeItem('chatUsername');
     window.location.href = '/login.html';
