@@ -64,7 +64,6 @@ app.post('/conversations', async (req, res) => {
     try {
         const { sender, receiver } = req.body;
         
-        // Security check: Does the receiver exist?
         const receiverExists = await User.findOne({ username: receiver });
         if (!receiverExists) return res.status(404).json({ error: 'User does not exist.' });
 
@@ -97,7 +96,19 @@ app.get('/messages/:conversationId', async (req, res) => {
 });
 
 // --- 3. REAL-TIME SOCKET HANDLING ---
+// A "dictionary" to remember which socket ID belongs to which username
+const connectedUsers = new Map(); 
+
 io.on('connection', (socket) => {
+    
+    // When a user opens the app, they tell the server who they are
+    socket.on('user-connected', (username) => {
+        connectedUsers.set(socket.id, username);
+        // Broadcast a clean list of unique online usernames to everyone
+        const onlineUsernames = [...new Set(connectedUsers.values())];
+        io.emit('update-online-users', onlineUsernames);
+    });
+
     socket.on('join-room', (conversationId) => {
         Array.from(socket.rooms).forEach(room => {
             if (room !== socket.id) socket.leave(room);
@@ -130,6 +141,13 @@ io.on('connection', (socket) => {
 
     socket.on('typing', (data) => socket.to(data.conversationId).emit('typing', data.username));
     socket.on('stop-typing', (conversationId) => socket.to(conversationId).emit('stop-typing'));
+
+    // When they close the tab, remove them and update everyone else
+    socket.on('disconnect', () => {
+        connectedUsers.delete(socket.id);
+        const onlineUsernames = [...new Set(connectedUsers.values())];
+        io.emit('update-online-users', onlineUsernames);
+    });
 });
 
 const PORT = process.env.PORT || 3000;
