@@ -259,10 +259,23 @@ body {
     display: none !important;
 }
 
+/* --- MESSAGE TIMESTAMPS --- */
 .msg-timestamp {
     font-size: 10px;
     opacity: 0.6;
     text-align: right;
     margin-top: 4px;
     display: block;
+}
+
+/* --- ONLINE INDICATORS --- */
+.online-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #44b700;
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+    box-shadow: 0 0 0 2px var(--white);
 }

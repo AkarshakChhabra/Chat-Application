@@ -8,6 +8,7 @@ if (!savedUsername) {
 const currentUsername = savedUsername;
 let currentConversationId = null; 
 let typingTimer;
+let currentOnlineUsers = []; // Keeps track of who is online
 
 // --- DOM ELEMENTS ---
 const chatForm = document.getElementById('message-form');
@@ -19,14 +20,22 @@ const statusDot = document.getElementById('status-dot');
 const conversationList = document.getElementById('conversation-list');
 const typingIndicator = document.getElementById('typing-indicator');
 
-// Modal Elements
 const newChatBtn = document.getElementById('new-chat-btn');
 const newChatModal = document.getElementById('new-chat-modal');
 const cancelChatBtn = document.getElementById('cancel-chat-btn');
 const startChatBtn = document.getElementById('start-chat-btn');
 const newChatUsernameInput = document.getElementById('new-chat-username');
 
-// --- 1. INITIALIZATION (Load the Sidebar) ---
+// --- 1. INITIALIZATION ---
+// Tell the server we arrived!
+socket.emit('user-connected', currentUsername);
+
+// Listen for the live list of users from the server
+socket.on('update-online-users', (onlineUsers) => {
+    currentOnlineUsers = onlineUsers;
+    loadConversations(); // Re-draw the sidebar to show/hide the green dots!
+});
+
 loadConversations();
 
 async function loadConversations() {
@@ -44,7 +53,11 @@ async function loadConversations() {
             div.classList.add('convo-item');
             if (convo._id === currentConversationId) div.classList.add('active'); 
             
-            div.innerHTML = `<div class="convo-name">${displayName}</div>`;
+            // Check if the other user is in our online list!
+            const isOnline = currentOnlineUsers.includes(otherUser);
+            const onlineIndicator = isOnline ? '<span class="online-dot" title="Online"></span>' : '';
+            
+            div.innerHTML = `<div class="convo-name">${displayName} ${onlineIndicator}</div>`;
             div.addEventListener('click', () => selectConversation(convo._id, displayName));
             conversationList.appendChild(div);
         });
@@ -57,7 +70,14 @@ async function loadConversations() {
 async function selectConversation(convoId, displayName) {
     currentConversationId = convoId;
     chatTitle.textContent = displayName;
-    statusDot.classList.remove('hidden');
+    
+    // Show/hide the header status dot based on if they are online
+    const otherUser = displayName; // For 1-on-1, the display name is the user
+    if (currentOnlineUsers.includes(otherUser)) {
+        statusDot.classList.remove('hidden');
+    } else {
+        statusDot.classList.add('hidden');
+    }
     
     chatInput.disabled = false;
     sendBtn.disabled = false;
@@ -74,7 +94,6 @@ async function selectConversation(convoId, displayName) {
         messages.forEach(msg => {
             const type = msg.sender === currentUsername ? 'sent' : 'received';
             const senderName = msg.sender === currentUsername ? 'You' : msg.sender;
-            // NEW: Pass the database timestamp to the helper function!
             appendMessage(msg.text, type, senderName, msg.createdAt);
         });
     } catch (err) {
@@ -122,7 +141,6 @@ socket.on('chat-message', (msg) => {
     if (msg.conversationId === currentConversationId) {
         const type = msg.username === currentUsername ? 'sent' : 'received';
         const senderName = msg.username === currentUsername ? 'You' : msg.username;
-        // NEW: Pass the live timestamp from the server broadcast!
         appendMessage(msg.text, type, senderName, msg.createdAt);
     }
     loadConversations();
@@ -169,7 +187,6 @@ function appendMessage(text, type, senderName, timestamp) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message', type);
     
-    // Convert the database string into a nice local time (e.g., "1:45 PM")
     const dateObj = timestamp ? new Date(timestamp) : new Date();
     const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
