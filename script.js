@@ -1,11 +1,15 @@
 const socket = io();
 
+// --- STATE & AUTHENTICATION ---
 const savedUsername = localStorage.getItem('chatUsername');
-if (!savedUsername) window.location.href = '/login.html';
+if (!savedUsername) {
+    window.location.href = '/login.html'; 
+}
 const currentUsername = savedUsername;
 let currentConversationId = null; 
 let typingTimer;
 
+// --- DOM ELEMENTS ---
 const chatForm = document.getElementById('message-form');
 const chatInput = document.getElementById('user-msg');
 const sendBtn = document.getElementById('send-btn');
@@ -15,12 +19,14 @@ const statusDot = document.getElementById('status-dot');
 const conversationList = document.getElementById('conversation-list');
 const typingIndicator = document.getElementById('typing-indicator');
 
+// Modal Elements
 const newChatBtn = document.getElementById('new-chat-btn');
 const newChatModal = document.getElementById('new-chat-modal');
 const cancelChatBtn = document.getElementById('cancel-chat-btn');
 const startChatBtn = document.getElementById('start-chat-btn');
 const newChatUsernameInput = document.getElementById('new-chat-username');
 
+// --- 1. INITIALIZATION (Load the Sidebar) ---
 loadConversations();
 
 async function loadConversations() {
@@ -47,6 +53,7 @@ async function loadConversations() {
     }
 }
 
+// --- 2. SWITCHING CHATS ---
 async function selectConversation(convoId, displayName) {
     currentConversationId = convoId;
     chatTitle.textContent = displayName;
@@ -67,13 +74,15 @@ async function selectConversation(convoId, displayName) {
         messages.forEach(msg => {
             const type = msg.sender === currentUsername ? 'sent' : 'received';
             const senderName = msg.sender === currentUsername ? 'You' : msg.sender;
-            appendMessage(msg.text, type, senderName);
+            // NEW: Pass the database timestamp to the helper function!
+            appendMessage(msg.text, type, senderName, msg.createdAt);
         });
     } catch (err) {
         console.error("Error loading messages", err);
     }
 }
 
+// --- 3. CREATING A NEW CHAT ---
 newChatBtn.addEventListener('click', () => newChatModal.classList.remove('hidden'));
 
 cancelChatBtn.addEventListener('click', () => {
@@ -92,7 +101,6 @@ startChatBtn.addEventListener('click', async () => {
             body: JSON.stringify({ sender: currentUsername, receiver })
         });
         
-        // Alert if the server rejects the username
         if (!res.ok) {
             const errorData = await res.json();
             return alert(errorData.error); 
@@ -109,11 +117,13 @@ startChatBtn.addEventListener('click', async () => {
     }
 });
 
+// --- 4. SOCKET LISTENERS (Real-time Magic) ---
 socket.on('chat-message', (msg) => {
     if (msg.conversationId === currentConversationId) {
         const type = msg.username === currentUsername ? 'sent' : 'received';
         const senderName = msg.username === currentUsername ? 'You' : msg.username;
-        appendMessage(msg.text, type, senderName);
+        // NEW: Pass the live timestamp from the server broadcast!
+        appendMessage(msg.text, type, senderName, msg.createdAt);
     }
     loadConversations();
 });
@@ -128,6 +138,8 @@ socket.on('stop-typing', () => {
     typingIndicator.classList.add('hidden');
 });
 
+
+// --- 5. SENDING MESSAGES & TYPING ---
 chatInput.addEventListener('input', () => {
     if (currentConversationId) {
         socket.emit('typing', { conversationId: currentConversationId, username: currentUsername });
@@ -152,19 +164,28 @@ chatForm.addEventListener('submit', (e) => {
     }
 });
 
-function appendMessage(text, type, senderName) {
+// --- HELPER FUNCTION: DRAW MESSAGES ---
+function appendMessage(text, type, senderName, timestamp) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message', type);
+    
+    // Convert the database string into a nice local time (e.g., "1:45 PM")
+    const dateObj = timestamp ? new Date(timestamp) : new Date();
+    const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     msgDiv.innerHTML = `
         <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px; font-weight: bold;">
             ${senderName}
         </div>
         ${text}
+        <div class="msg-timestamp">${timeString}</div>
     `;
+    
     chatWindow.appendChild(msgDiv);
     chatWindow.scrollTop = chatWindow.scrollHeight; 
 }
 
+// --- LOGOUT ---
 document.getElementById('logout-btn').addEventListener('click', () => {
     localStorage.removeItem('chatUsername');
     window.location.href = '/login.html';
