@@ -9,6 +9,7 @@ const currentUsername = savedUsername;
 let currentConversationId = null; 
 let typingTimer;
 let currentOnlineUsers = []; // Keeps track of who is online
+let unreadCounts = {};       // Keeps track of unread messages per room
 
 // --- DOM ELEMENTS ---
 const chatForm = document.getElementById('message-form');
@@ -58,9 +59,13 @@ async function loadConversations() {
             const isOnline = currentOnlineUsers.includes(otherUser);
             const onlineIndicator = isOnline ? '<span class="online-dot" title="Online"></span>' : '';
             
-            // Inject the name, online dot, and the new delete button!
+            // Check if we have unread messages for this room
+            const unread = unreadCounts[convo._id];
+            const unreadBadge = unread ? `<span class="unread-badge">${unread}</span>` : '';
+            
+            // Inject the name, online dot, unread badge, and the delete button!
             div.innerHTML = `
-                <div class="convo-name">${displayName} ${onlineIndicator}</div>
+                <div class="convo-name">${displayName} ${onlineIndicator} ${unreadBadge}</div>
                 <button class="delete-chat-btn" title="Delete Chat">🗑️</button>
             `;
             
@@ -100,6 +105,10 @@ async function loadConversations() {
 // --- 2. SWITCHING CHATS ---
 async function selectConversation(convoId, displayName) {
     currentConversationId = convoId;
+    
+    // Clear the unread badge for this room since we are looking at it now
+    delete unreadCounts[convoId]; 
+    
     chatTitle.textContent = displayName;
     
     // Show/hide the header status dot based on if they are online
@@ -173,8 +182,11 @@ socket.on('chat-message', (msg) => {
         const type = msg.username === currentUsername ? 'sent' : 'received';
         const senderName = msg.username === currentUsername ? 'You' : msg.username;
         appendMessage(msg.text, type, senderName, msg.createdAt);
+    } else {
+        // If we are NOT looking at the chat, increase the unread math!
+        unreadCounts[msg.conversationId] = (unreadCounts[msg.conversationId] || 0) + 1;
     }
-    loadConversations();
+    loadConversations(); // Always refresh the sidebar to update timestamps/badges
 });
 
 socket.on('typing', (username) => {
@@ -187,7 +199,7 @@ socket.on('stop-typing', () => {
     typingIndicator.classList.add('hidden');
 });
 
-// NEW: Listen for a chat being deleted by the other user
+// Listen for a chat being deleted by the other user
 socket.on('chat-deleted', (convoId) => {
     if (currentConversationId === convoId) {
         currentConversationId = null;
@@ -197,9 +209,10 @@ socket.on('chat-deleted', (convoId) => {
         chatInput.disabled = true;
         sendBtn.disabled = true;
     }
+    // Also clear any unread counts for this deleted chat just in case
+    delete unreadCounts[convoId];
     loadConversations(); // Refresh the sidebar to remove it
 });
-
 
 // --- 5. SENDING MESSAGES & TYPING ---
 chatInput.addEventListener('input', () => {
