@@ -91,6 +91,26 @@ body {
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     transition: background 0.2s;
+    display: flex;               
+    justify-content: space-between; 
+    align-items: center;         
+}
+
+.delete-chat-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0; 
+    transition: all 0.2s;
+    font-size: 1.2rem;
+}
+
+.convo-item:hover .delete-chat-btn {
+    opacity: 1; 
+}
+
+.delete-chat-btn:hover {
+    transform: scale(1.2); 
 }
 
 .convo-item:hover {

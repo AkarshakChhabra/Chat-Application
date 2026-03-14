@@ -20,6 +20,7 @@ const statusDot = document.getElementById('status-dot');
 const conversationList = document.getElementById('conversation-list');
 const typingIndicator = document.getElementById('typing-indicator');
 
+// Modal Elements
 const newChatBtn = document.getElementById('new-chat-btn');
 const newChatModal = document.getElementById('new-chat-modal');
 const cancelChatBtn = document.getElementById('cancel-chat-btn');
@@ -53,11 +54,41 @@ async function loadConversations() {
             div.classList.add('convo-item');
             if (convo._id === currentConversationId) div.classList.add('active'); 
             
-            // Check if the other user is in our online list!
+            // Check if the other user is in our online list
             const isOnline = currentOnlineUsers.includes(otherUser);
             const onlineIndicator = isOnline ? '<span class="online-dot" title="Online"></span>' : '';
             
-            div.innerHTML = `<div class="convo-name">${displayName} ${onlineIndicator}</div>`;
+            // Inject the name, online dot, and the new delete button!
+            div.innerHTML = `
+                <div class="convo-name">${displayName} ${onlineIndicator}</div>
+                <button class="delete-chat-btn" title="Delete Chat">🗑️</button>
+            `;
+            
+            // Handle the trash can click (Delete Chat)
+            const deleteBtn = div.querySelector('.delete-chat-btn');
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Stops the chat from opening when you click delete
+                
+                if (confirm(`Are you sure you want to permanently delete your chat with ${displayName}?`)) {
+                    await fetch(`/conversations/${convo._id}`, { method: 'DELETE' });
+                    
+                    // Tell the server to broadcast the deletion
+                    socket.emit('chat-deleted', convo._id);
+                    
+                    // If we deleted the chat we are currently looking at, clear the screen
+                    if (currentConversationId === convo._id) {
+                        currentConversationId = null;
+                        chatTitle.textContent = "Select a chat to start";
+                        statusDot.classList.add('hidden');
+                        chatWindow.innerHTML = '<div class="message received" style="margin: auto; text-align: center; background: none; box-shadow: none;">Chat deleted. Select a new chat.</div>';
+                        chatInput.disabled = true;
+                        sendBtn.disabled = true;
+                    }
+                    loadConversations(); // Refresh the sidebar
+                }
+            });
+
+            // Handle clicking the chat row (to open it)
             div.addEventListener('click', () => selectConversation(convo._id, displayName));
             conversationList.appendChild(div);
         });
@@ -154,6 +185,19 @@ socket.on('typing', (username) => {
 socket.on('stop-typing', () => {
     typingIndicator.textContent = "";
     typingIndicator.classList.add('hidden');
+});
+
+// NEW: Listen for a chat being deleted by the other user
+socket.on('chat-deleted', (convoId) => {
+    if (currentConversationId === convoId) {
+        currentConversationId = null;
+        chatTitle.textContent = "Select a chat to start";
+        statusDot.classList.add('hidden');
+        chatWindow.innerHTML = '<div class="message received" style="margin: auto; text-align: center; background: none; box-shadow: none;">The other user deleted this chat.</div>';
+        chatInput.disabled = true;
+        sendBtn.disabled = true;
+    }
+    loadConversations(); // Refresh the sidebar to remove it
 });
 
 

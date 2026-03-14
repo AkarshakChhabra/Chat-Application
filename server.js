@@ -95,6 +95,21 @@ app.get('/messages/:conversationId', async (req, res) => {
     }
 });
 
+app.delete('/conversations/:conversationId', async (req, res) => {
+    try {
+        const convoId = req.params.conversationId;
+        
+        await Message.deleteMany({ conversationId: convoId });
+        
+        await Conversation.findByIdAndDelete(convoId);
+
+        res.status(200).json({ message: 'Chat permanently deleted.' });
+    } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).json({ error: 'Failed to delete chat.' });
+    }
+});
+
 // --- 3. REAL-TIME SOCKET HANDLING ---
 // A "dictionary" to remember which socket ID belongs to which username
 const connectedUsers = new Map(); 
@@ -147,6 +162,10 @@ io.on('connection', (socket) => {
         connectedUsers.delete(socket.id);
         const onlineUsernames = [...new Set(connectedUsers.values())];
         io.emit('update-online-users', onlineUsernames);
+    });
+
+    socket.on('chat-deleted', (conversationId) => {
+        io.to(conversationId).emit('chat-deleted', conversationId);
     });
 });
 
