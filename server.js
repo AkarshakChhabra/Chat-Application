@@ -8,16 +8,23 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// --- MIDDLEWARE ---
 app.use(express.static(__dirname));
 app.use(express.json()); 
 
+// --- DATABASE CONNECTION ---
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Connected to MongoDB Atlas'))
     .catch(err => console.error('Database connection error:', err));
 
+// --- DATABASE MODELS ---
 const User = require('./models/User'); 
 const Conversation = require('./models/Conversation');
 const Message = require('./models/Message');
+
+// ==========================================
+//           API ROUTES
+// ==========================================
 
 // --- 1. USER AUTHENTICATION ---
 app.post('/signup', async (req, res) => {
@@ -95,14 +102,12 @@ app.get('/messages/:conversationId', async (req, res) => {
     }
 });
 
+// Delete a conversation and all its messages
 app.delete('/conversations/:conversationId', async (req, res) => {
     try {
         const convoId = req.params.conversationId;
-        
         await Message.deleteMany({ conversationId: convoId });
-        
         await Conversation.findByIdAndDelete(convoId);
-
         res.status(200).json({ message: 'Chat permanently deleted.' });
     } catch (error) {
         console.error("Delete error:", error);
@@ -110,27 +115,39 @@ app.delete('/conversations/:conversationId', async (req, res) => {
     }
 });
 
-// --- 3. REAL-TIME SOCKET HANDLING ---
-// A "dictionary" to remember which socket ID belongs to which username
+
+// ==========================================
+//        REAL-TIME SOCKET HANDLING
+// ==========================================
+
 const connectedUsers = new Map(); 
 
 io.on('connection', (socket) => {
     
-    // When a user opens the app, they tell the server who they are
+    // 1. User connects and joins their personal notification room
     socket.on('user-connected', (username) => {
+        socket.join(username); // Connect to a personal room named after them
+        
         connectedUsers.set(socket.id, username);
-        // Broadcast a clean list of unique online usernames to everyone
         const onlineUsernames = [...new Set(connectedUsers.values())];
         io.emit('update-online-users', onlineUsernames);
     });
 
+    // 2. User clicks a chat
     socket.on('join-room', (conversationId) => {
+        const username = connectedUsers.get(socket.id);
+        
+        // Leave previous chat rooms, BUT protect their personal username room!
         Array.from(socket.rooms).forEach(room => {
-            if (room !== socket.id) socket.leave(room);
+            if (room !== socket.id && room !== username) {
+                socket.leave(room);
+            }
         });
+        
         socket.join(conversationId);
     });
 
+    // 3. User sends a message
     socket.on('chat-message', async (msgData) => {
         try {
             const newMessage = new Message({
@@ -140,13 +157,22 @@ io.on('connection', (socket) => {
             });
             await newMessage.save();
 
-            io.to(msgData.conversationId).emit('chat-message', {
+            const convo = await Conversation.findById(msgData.conversationId);
+
+            const payload = {
                 _id: newMessage._id,
                 conversationId: msgData.conversationId,
                 username: msgData.username, 
                 text: msgData.text,
                 createdAt: newMessage.createdAt
-            });
+            };
+
+            // Broadcast the message directly to every participant's personal room!
+            if (convo && convo.participants) {
+                convo.participants.forEach(participant => {
+                    io.to(participant).emit('chat-message', payload);
+                });
+            }
             
             await Conversation.findByIdAndUpdate(msgData.conversationId, { updatedAt: Date.now() });
         } catch (err) {
@@ -154,21 +180,23 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 4. Typing indicators & Deletions
     socket.on('typing', (data) => socket.to(data.conversationId).emit('typing', data.username));
     socket.on('stop-typing', (conversationId) => socket.to(conversationId).emit('stop-typing'));
+    
+    socket.on('chat-deleted', (conversationId) => {
+        io.to(conversationId).emit('chat-deleted', conversationId);
+    });
 
-    // When they close the tab, remove them and update everyone else
+    // 5. User disconnects
     socket.on('disconnect', () => {
         connectedUsers.delete(socket.id);
         const onlineUsernames = [...new Set(connectedUsers.values())];
         io.emit('update-online-users', onlineUsernames);
     });
-
-    socket.on('chat-deleted', (conversationId) => {
-        io.to(conversationId).emit('chat-deleted', conversationId);
-    });
 });
 
+// --- START SERVER ---
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
