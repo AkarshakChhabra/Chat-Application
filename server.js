@@ -32,6 +32,7 @@ app.post('/signup', async (req, res) => {
         await new User({ username, password }).save();
         res.status(201).json({ message: 'Account created successfully!' });
     } catch (error) {
+        console.error("SIGNUP ERROR:", error);
         res.status(500).json({ error: 'Internal server error.' });
     }
 });
