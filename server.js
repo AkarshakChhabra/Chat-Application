@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const User = require('./models/User'); 
 const Conversation = require('./models/Conversation');
@@ -12,6 +13,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const aiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
 app.use(express.static(__dirname));
 app.use(express.json()); 
 
@@ -19,7 +23,6 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('Connected to MongoDB Atlas'))
     .catch(err => console.error('Database connection error:', err));
 
-// Auth Routes
 app.post('/signup', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -47,7 +50,6 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Chat Data Routes
 app.get('/conversations/:username', async (req, res) => {
     try {
         const convos = await Conversation.find({ participants: req.params.username })
@@ -102,13 +104,11 @@ app.delete('/conversations/:conversationId', async (req, res) => {
     }
 });
 
-// Real-Time Socket Logic
 const connectedUsers = new Map(); 
 
 io.on('connection', (socket) => {
-    
     socket.on('user-connected', (username) => {
-        socket.join(username); // Join personal pub/sub room
+        socket.join(username); 
         connectedUsers.set(socket.id, username);
         io.emit('update-online-users', [...new Set(connectedUsers.values())]);
     });
@@ -138,14 +138,44 @@ io.on('connection', (socket) => {
                 createdAt: newMessage.createdAt
             };
 
-            // Route to specific users
             if (convo?.participants) {
                 convo.participants.forEach(user => io.to(user).emit('chat-message', payload));
             }
             
             await Conversation.findByIdAndUpdate(msgData.conversationId, { updatedAt: Date.now() });
+
+            if (msgData.text.trim().toLowerCase().startsWith('@bot')) {
+                const userPrompt = msgData.text.replace(/@bot/i, '').trim();
+                if (!userPrompt) return;
+
+                convo.participants.forEach(user => io.to(user).emit('typing', 'AI Bot'));
+
+                const aiResult = await aiModel.generateContent(userPrompt);
+                const aiResponseText = aiResult.response.text();
+
+                const aiMessage = await new Message({
+                    conversationId: msgData.conversationId,
+                    sender: 'AI Bot',
+                    text: aiResponseText
+                }).save();
+
+                const aiPayload = {
+                    _id: aiMessage._id,
+                    conversationId: msgData.conversationId,
+                    username: 'AI Bot', 
+                    text: aiResponseText,
+                    createdAt: aiMessage.createdAt
+                };
+
+                convo.participants.forEach(user => {
+                    io.to(user).emit('stop-typing');
+                    io.to(user).emit('chat-message', aiPayload);
+                });
+            }
+
         } catch (err) {
-            console.error("Message processing error:", err);
+            console.error('Message processing error:', err);
+            io.to(msgData.conversationId).emit('stop-typing');
         }
     });
 
