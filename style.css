@@ -15,6 +15,8 @@ body {
     justify-content: center;
     align-items: center;
     height: 100vh;
+    height: 100dvh; /* NEW: Accounts for mobile browser toolbars */
+    overflow: hidden; /* NEW: Prevents the entire page from scrolling */
 }
 
 /* Layout */
@@ -125,6 +127,7 @@ body {
     display: flex;
     flex-direction: column;
     background: #efeae2; 
+    min-height: 0; /* CRITICAL FIX: Stops the area from stretching past the screen */
 }
 
 .app-header {
@@ -149,6 +152,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    min-height: 0; /* CRITICAL FIX: Forces the window to scroll instead of pushing the input down */
 }
 
 .message {
@@ -190,6 +194,7 @@ body {
     background: var(--white);
     display: flex;
     gap: 10px;
+    flex-shrink: 0; /* NEW: Tells the browser NEVER to squash the input box */
 }
 
 #user-msg {
@@ -217,6 +222,7 @@ body {
     font-size: 12px;
     color: #555;
     font-style: italic;
+    flex-shrink: 0;
 }
 
 /* Badges & Indicators */
@@ -292,12 +298,14 @@ body {
 
 .hidden { display: none !important; }
 
-
-   /* Mobile Responsiveness */
+/* ==========================================
+   MOBILE RESPONSIVENESS (Max Width 768px)
+   ========================================== */
 @media (max-width: 768px) {
     .chat-wrapper {
         flex-direction: column;
         height: 100vh; 
+        height: 100dvh; /* NEW: Fixes bottom cut-off on iPhones/Androids */
         border-radius: 0;
         max-width: 100%;
     }
