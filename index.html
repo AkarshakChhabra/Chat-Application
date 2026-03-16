@@ -3,41 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Multi-Chat App</title>
+    <title>Real-Time Chat</title>
     <link rel="stylesheet" href="style.css">
-    <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <div class="chat-wrapper">
+        
         <div class="sidebar">
             <div class="sidebar-header">
                 <h2>Chats</h2>
                 <div class="sidebar-actions">
-                    <button id="new-chat-btn" class="icon-btn" title="New Chat">+</button>
-                    <button id="logout-btn" class="logout-sm">Logout</button>
+                    <button class="icon-btn" id="new-chat-btn" title="New Chat">+</button>
+                    <button class="logout-sm" id="logout-btn">Logout</button>
                 </div>
             </div>
-            <div id="conversation-list" class="conversation-list"></div>
+            <div class="conversation-list" id="conversation-list">
+                </div>
         </div>
 
         <div class="chat-area">
-            <header class="app-header">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <h1 id="chat-title">Select a chat to start</h1>
-                    <span id="status-dot" class="hidden"></span>
-                </div>
-            </header>
-
-            <div id="chat-window" class="chat-window">
-                <div class="message received" style="margin: auto; text-align: center; background: none; box-shadow: none;">
-                    Welcome! Select a chat from the sidebar or start a new one.
-                </div>
+            <div class="app-header">
+                <h1 id="chat-title">Select a chat to start</h1>
+                <div id="status-dot" class="hidden"></div>
             </div>
+            
+            <div class="chat-window" id="chat-window">
+                </div>
 
-            <div id="typing-indicator" class="typing-indicator-hidden"></div>
+            <div id="typing-indicator" class="hidden"></div>
             
             <form id="message-form" class="input-area">
-                <input type="text" id="user-msg" placeholder="Write a message..." autocomplete="off" required disabled>
+                <input type="text" id="user-msg" placeholder="Type a message..." autocomplete="off" disabled>
                 <button type="submit" id="send-btn" disabled>Send</button>
             </form>
         </div>
@@ -45,15 +41,16 @@
 
     <div id="new-chat-modal" class="login-overlay hidden">
         <div class="login-box">
-            <h2>Start a New Chat</h2>
-            <input type="text" id="new-chat-username" placeholder="Enter user's exact username" autocomplete="off">
+            <h2>Start New Chat</h2>
+            <input type="text" id="new-chat-username" placeholder="Friend's exact username">
             <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button id="cancel-chat-btn" style="background: #ccc; color: #333;">Cancel</button>
                 <button id="start-chat-btn">Start Chat</button>
+                <button id="cancel-chat-btn" style="background: #e4e6eb; color: #333;">Cancel</button>
             </div>
         </div>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

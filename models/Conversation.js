@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const conversationSchema = new mongoose.Schema({
+const ConversationSchema = new mongoose.Schema({
     participants: [{ 
         type: String, 
         required: true 
@@ -10,11 +10,8 @@ const conversationSchema = new mongoose.Schema({
         default: false 
     },
     chatName: { 
-        type: String, 
-        trim: true 
-    } 
-}, { 
-    timestamps: true 
-});
+        type: String 
+    }
+}, { timestamps: true });
 
-module.exports = mongoose.model('Conversation', conversationSchema);
+module.exports = mongoose.model('Conversation', ConversationSchema);
