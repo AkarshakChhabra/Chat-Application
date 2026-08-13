@@ -6,6 +6,10 @@ A full-stack, real-time messaging platform built with Node.js, Socket.io, and Mo
 
 The core highlight of this project is the integrated AI assistant. By leveraging the Google Gemini API, I built a server-side interception pipeline. Whenever a user tags `@bot` in a conversation, the backend catches the message, queries the Large Language Model, and instantly broadcasts the generated response back into the chat room for both users to read together.
 
+[Alternative Text](images/screenshot1.png)
+[Alternative Text](images/screenshot2.png)
+
+
 ## Features
 * **Real-time messaging:** Powered by Socket.io so messages appear instantly without refreshing.
 * **AI Bot:** Tag `@bot` to ask questions or get help directly in the chat.
